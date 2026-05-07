@@ -1,87 +1,50 @@
-# Forge 是一个面向 AI Code Agent 的计算资源控制 CLI。
+# Forge
 
-它统一管理本地物理机、VM 与远程主机，并以 workspace、lease 与 capability 为核心抽象，为 Agent 提供稳定、可编程的计算环境。
+Forge 是一个面向 AI Code Agent 的计算资源控制 CLI。它统一管理本地物理机、VM 与远程主机，并把计算资源抽象成可发现、可探测、可分配、可执行、可扩展的 Provider 资源。
 
-Forge 不关心“部署 workload”，而是专注于：
+它的目标是：让 AI Agent 像调用函数一样使用计算资源。
 
-* 发现计算资源
-* 分配与回收资源
-* 创建 Agent Workspace
-* 执行编译 / 测试 / 验证任务
-* 通过 Provider 插件扩展不同基础设施
+## 文档
 
-Forge 采用 SSH-first 与 provider-based 架构，初期支持：
-
-* 本地物理机
-* libvirt/qemu VM
-* SSH Host
-
-后续可扩展：
-
-* AWS / GCP / Azure
-* Bare Metal
-* GPU Fleet
-* Kubernetes / Nomad
-* Snapshot / Image / Sandbox
-
-Forge 的目标是：
-
-“让 AI Agent 像调用函数一样使用计算资源。”
-
-更详细的设计说明见 `docs/design.md`，使用说明见 `docs/usage.md`。
+- `docs/design.md`：架构、数据模型、Provider 边界与扩展点
+- `docs/usage.md`：安装、SSH 节点管理、导入格式与命令示例
+- `README.md`：英文入口页
 
 ## 当前实现范围
 
-当前版本提供 Rust 实现的 `forge` CLI 框架，并优先实现 SSH Provider 的节点资源管理能力。`lease`、`workspace` 与其他 Provider 暂时保留命令入口，后续继续扩展。
+当前 Rust 版本重点实现 SSH Provider 的节点资源管理能力：
 
-## 安装与构建
+- 初始化本地 Forge 状态
+- 添加、导入、列出、查看和删除 SSH 节点
+- 测试节点连通性
+- 探测主机能力信息
+- 通过 SSH 执行远端命令
+
+`lease` 和 `workspace` 目前只保留命令入口，完整生命周期逻辑后续继续扩展。
+
+## 安装
 
 ```bash
 cargo build
 cargo run -- --help
 ```
 
-密码认证依赖系统命令 `sshpass`，证书与密钥认证依赖系统 `ssh`。使用 `password_ref: prompt` 时会从标准输入读取密码。
+如果希望把当前仓库安装成本机 `forge` 命令：
 
-## 初始化
+```bash
+cargo install --path .
+forge --help
+```
+
+## 快速开始
 
 ```bash
 forge init
+forge provider list
+forge node list ssh
 ```
 
-默认会创建：
-
-```text
-~/.forge/
-├── config.yaml
-└── providers/
-    └── ssh/
-        └── nodes.yaml
-```
-
-## SSH 节点管理
-
-添加密码认证节点：
-
-```bash
-forge node add ssh dev-password \
-  --host 1.2.3.4 \
-  --user ubuntu \
-  --auth password \
-  --password-ref env:FORGE_DEV_PASSWORD
-```
-
-也允许明文密码：
-
-```bash
-forge node add ssh dev-password \
-  --host 1.2.3.4 \
-  --user ubuntu \
-  --auth password \
-  --password 'secret'
-```
-
-添加普通 SSH 密钥节点：
+添加一个 SSH 密钥节点：
 
 ```bash
 forge node add ssh dev-key \
@@ -91,66 +54,48 @@ forge node add ssh dev-key \
   --key ~/.ssh/id_ed25519
 ```
 
-添加 OpenSSH certificate 节点：
+验证并探测节点：
 
 ```bash
-forge node add ssh dev-cert \
-  --host 1.2.3.6 \
-  --user ubuntu \
-  --auth certificate \
-  --key ~/.ssh/id_ed25519 \
-  --cert ~/.ssh/id_ed25519-cert.pub
-```
-
-常用操作：
-
-```bash
-forge node list ssh
-forge node show ssh dev-key
 forge node ping ssh dev-key
 forge node inspect ssh dev-key
 forge node exec ssh dev-key -- uname -a
-forge node remove ssh dev-key
 ```
 
-## 批量导入 SSH 节点
+## 命令概览
 
-支持 YAML 与 JSON：
+- `forge init`：创建 `~/.forge/` 和默认 Provider 文件
+- `forge provider list`：查看可用 Provider
+- `forge node add ssh`：添加单个 SSH 节点
+- `forge node import ssh`：从 YAML 或 JSON 批量导入 SSH 节点
+- `forge node list [ssh]`：列出已配置节点
+- `forge node show ssh <name>`：以 YAML 输出节点详情，并脱敏敏感信息
+- `forge node remove ssh <name>`：删除一个节点
+- `forge node ping ssh <name>`：测试 SSH 连通性
+- `forge node inspect ssh <name>`：采集主机名、系统、CPU、内存、磁盘和 uptime
+- `forge node exec ssh <name> -- <command>`：执行远端命令并透传退出码
 
-```bash
-forge node import ssh ./nodes.yaml --dry-run
-forge node import ssh ./nodes.yaml
-forge node import ssh ./nodes.yaml --replace
+## 存储位置
+
+Forge 的本地状态默认保存在 `~/.forge/` 下：
+
+```text
+~/.forge/
+├── config.yaml
+└── providers/
+    └── ssh/
+        └── nodes.yaml
 ```
 
-YAML 示例：
+SSH Provider 自己管理节点配置，后续其他 Provider 可以实现独立的配置来源和存储格式。
 
-```yaml
-nodes:
-  - name: dev-password
-    host: 1.2.3.4
-    port: 22
-    user: ubuntu
-    auth:
-      type: password
-      password_ref: env:FORGE_DEV_PASSWORD
-    labels:
-      env: dev
+## SSH 认证
 
-  - name: dev-key
-    host: 1.2.3.5
-    user: ubuntu
-    auth:
-      type: key_pair
-      key_path: ~/.ssh/id_ed25519
+密码认证依赖系统命令 `sshpass`；密钥和证书认证依赖系统 `ssh`。
 
-  - name: dev-cert
-    host: 1.2.3.6
-    user: ubuntu
-    auth:
-      type: certificate
-      key_path: ~/.ssh/id_ed25519
-      cert_path: ~/.ssh/id_ed25519-cert.pub
-```
+`password_ref` 支持以下写法：
 
-SSH Provider 的节点配置由 Provider 自己管理，后续其他 Provider 可以实现独立的配置来源和存储格式。
+- `env:NAME`
+- `prompt`
+- `plain:VALUE`
+- 其他字符串会按字面量使用
