@@ -28,6 +28,8 @@ Forge 的目标是：
 
 “让 AI Agent 像调用函数一样使用计算资源。”
 
+更详细的设计说明见 `docs/design.md`，使用说明见 `docs/usage.md`。
+
 ## 当前实现范围
 
 当前版本提供 Rust 实现的 `forge` CLI 框架，并优先实现 SSH Provider 的节点资源管理能力。`lease`、`workspace` 与其他 Provider 暂时保留命令入口，后续继续扩展。
